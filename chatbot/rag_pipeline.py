@@ -7,6 +7,7 @@ import numpy as np
 from sentence_transformers import SentenceTransformer
 
 from embeddings.vector_store import DEFAULT_MODEL_NAME, load_index_and_texts
+from chatbot.facts_store import get_fact_answer
 
 
 PROMPT_TEMPLATE = """You are a campus assistant.
@@ -28,8 +29,8 @@ class RAGConfig:
     index_path: Path = Path("embeddings/faiss_index.bin")
     texts_path: Path = Path("embeddings/text_chunks.npy")
     model_name: str = DEFAULT_MODEL_NAME
-    # Use fewer chunks by default to keep prompts small for hosted APIs.
-    top_k: int = 3
+    # Number of chunks to retrieve for context (truncated later before sending to Groq).
+    top_k: int = 5
 
 
 class RAGPipeline:
@@ -48,7 +49,11 @@ class RAGPipeline:
         self.encoder = SentenceTransformer(self.config.model_name)
 
     def retrieve(self, query: str) -> Tuple[List[str], List[float]]:
-        """Return top-k context chunks and their similarity scores."""
+        """Return top-k context chunks and their similarity scores.
+
+        Uses embedding-based retrieval first and falls back to a simple
+        keyword search over the corpus when similarity scores are low.
+        """
         query_vec = self.encoder.encode([query], convert_to_numpy=True).astype(
             "float32"
         )
@@ -66,7 +71,43 @@ class RAGPipeline:
             chunks.append(self.texts[idx])
             chunk_scores.append(float(sc))
 
+        # If we didn't retrieve anything useful, fall back to
+        # a simple keyword-based search on the raw text.
+        if not chunks or max(chunk_scores, default=0.0) < 0.15:
+            keyword_chunks = self.keyword_retrieve(query)
+            if keyword_chunks:
+                return keyword_chunks, [1.0] * len(keyword_chunks)
+
         return chunks, chunk_scores
+
+    def keyword_retrieve(self, query: str, max_results: int | None = None) -> List[str]:
+        """Very simple keyword-based retrieval over the raw text chunks.
+
+        This helps when embedding similarity fails for short or specific
+        keywords like 'placements', 'fees', or 'bus facility'.
+        """
+        if max_results is None:
+            max_results = self.config.top_k
+
+        # Basic tokenization and filtering
+        query_terms = [
+            w.lower() for w in query.split() if len(w) >= 4 and w.isalpha()
+        ]
+        if not query_terms:
+            return []
+
+        scored: List[tuple[float, str]] = []
+        for t in self.texts:
+            tl = t.lower()
+            score = sum(tl.count(term) for term in query_terms)
+            if score > 0:
+                scored.append((float(score), t))
+
+        if not scored:
+            return []
+
+        scored.sort(key=lambda x: x[0], reverse=True)
+        return [t for _, t in scored[:max_results]]
 
     def build_context(self, chunks: List[str]) -> str:
         return "\n\n---\n\n".join(chunks)
@@ -76,6 +117,12 @@ class RAGPipeline:
         model_answer_fn: a callable that accepts a prompt:str and returns str.
         This allows plugging in OpenAI, Groq, or local models from the app layer.
         """
+        # 1) Try to answer using structured facts for high-value intents
+        fact = get_fact_answer(question)
+        if fact is not None:
+            return fact
+
+        # 2) Fall back to retrieval-augmented generation over website content
         chunks, _ = self.retrieve(question)
         if not chunks:
             return 'The information is not available on the official website.'
@@ -83,5 +130,27 @@ class RAGPipeline:
         context = self.build_context(chunks)
         prompt = PROMPT_TEMPLATE.format(context=context, question=question)
         return model_answer_fn(prompt)
+
+    def generate_answer_with_context(
+        self, question: str, model_answer_fn
+    ) -> tuple[str, str]:
+        """
+        Variant that also returns the raw context string used to build the prompt.
+        Useful for debugging and for a 'show context' UI option.
+        """
+        # 1) Try structured facts first
+        fact = get_fact_answer(question)
+        if fact is not None:
+            return fact, ""
+
+        # 2) Otherwise use retrieval-augmented answers
+        chunks, _ = self.retrieve(question)
+        if not chunks:
+            return 'The information is not available on the official website.', ''
+
+        context = self.build_context(chunks)
+        prompt = PROMPT_TEMPLATE.format(context=context, question=question)
+        answer = model_answer_fn(prompt)
+        return answer, context
 
 
