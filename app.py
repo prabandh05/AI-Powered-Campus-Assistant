@@ -141,22 +141,34 @@ def main() -> None:
         return
 
     if "chat_history" not in st.session_state:
-        st.session_state.chat_history = []
+        # Each entry: (role, text, optional_context)
+        st.session_state.chat_history: list[tuple[str, str, str | None]] = []
+
+    show_context = st.checkbox("Show retrieved context for each answer", value=False)
 
     user_query = st.text_input("Enter your question")
 
     if st.button("Ask") and user_query.strip():
         with st.spinner("Thinking..."):
-            answer = rag.generate_answer(user_query, model_answer_fn=model_answer_fn)
-        st.session_state.chat_history.append(("You", user_query))
-        st.session_state.chat_history.append(("Assistant", answer))
+            if show_context:
+                answer, context = rag.generate_answer_with_context(
+                    user_query, model_answer_fn=model_answer_fn
+                )
+            else:
+                answer = rag.generate_answer(
+                    user_query, model_answer_fn=model_answer_fn
+                )
+                context = None
+
+        st.session_state.chat_history.append(("You", user_query, None))
+        st.session_state.chat_history.append(("Assistant", answer, context))
 
     st.subheader("Conversation")
-    for role, text in st.session_state.chat_history:
-        if role == "You":
-            st.markdown(f"**{role}:** {text}")
-        else:
-            st.markdown(f"**{role}:** {text}")
+    for role, text, ctx in st.session_state.chat_history:
+        st.markdown(f"**{role}:** {text}")
+        if role == "Assistant" and ctx and show_context:
+            with st.expander("View retrieved context"):
+                st.markdown(f"```text\n{ctx}\n```")
 
 
 if __name__ == "__main__":

@@ -28,8 +28,8 @@ class RAGConfig:
     index_path: Path = Path("embeddings/faiss_index.bin")
     texts_path: Path = Path("embeddings/text_chunks.npy")
     model_name: str = DEFAULT_MODEL_NAME
-    # Use fewer chunks by default to keep prompts small for hosted APIs.
-    top_k: int = 3
+    # Number of chunks to retrieve for context (truncated later before sending to Groq).
+    top_k: int = 5
 
 
 class RAGPipeline:
@@ -123,5 +123,21 @@ class RAGPipeline:
         context = self.build_context(chunks)
         prompt = PROMPT_TEMPLATE.format(context=context, question=question)
         return model_answer_fn(prompt)
+
+    def generate_answer_with_context(
+        self, question: str, model_answer_fn
+    ) -> tuple[str, str]:
+        """
+        Variant that also returns the raw context string used to build the prompt.
+        Useful for debugging and for a 'show context' UI option.
+        """
+        chunks, _ = self.retrieve(question)
+        if not chunks:
+            return 'The information is not available on the official website.', ''
+
+        context = self.build_context(chunks)
+        prompt = PROMPT_TEMPLATE.format(context=context, question=question)
+        answer = model_answer_fn(prompt)
+        return answer, context
 
 
