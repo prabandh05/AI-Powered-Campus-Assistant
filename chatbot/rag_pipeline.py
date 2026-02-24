@@ -28,7 +28,8 @@ class RAGConfig:
     index_path: Path = Path("embeddings/faiss_index.bin")
     texts_path: Path = Path("embeddings/text_chunks.npy")
     model_name: str = DEFAULT_MODEL_NAME
-    top_k: int = 5
+    # Use fewer chunks by default to keep prompts small for hosted APIs.
+    top_k: int = 3
 
 
 class RAGPipeline:
