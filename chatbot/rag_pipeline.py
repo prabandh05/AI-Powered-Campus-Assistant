@@ -48,7 +48,11 @@ class RAGPipeline:
         self.encoder = SentenceTransformer(self.config.model_name)
 
     def retrieve(self, query: str) -> Tuple[List[str], List[float]]:
-        """Return top-k context chunks and their similarity scores."""
+        """Return top-k context chunks and their similarity scores.
+
+        Uses embedding-based retrieval first and falls back to a simple
+        keyword search over the corpus when similarity scores are low.
+        """
         query_vec = self.encoder.encode([query], convert_to_numpy=True).astype(
             "float32"
         )
@@ -66,7 +70,43 @@ class RAGPipeline:
             chunks.append(self.texts[idx])
             chunk_scores.append(float(sc))
 
+        # If we didn't retrieve anything useful, fall back to
+        # a simple keyword-based search on the raw text.
+        if not chunks or max(chunk_scores, default=0.0) < 0.15:
+            keyword_chunks = self.keyword_retrieve(query)
+            if keyword_chunks:
+                return keyword_chunks, [1.0] * len(keyword_chunks)
+
         return chunks, chunk_scores
+
+    def keyword_retrieve(self, query: str, max_results: int | None = None) -> List[str]:
+        """Very simple keyword-based retrieval over the raw text chunks.
+
+        This helps when embedding similarity fails for short or specific
+        keywords like 'placements', 'fees', or 'bus facility'.
+        """
+        if max_results is None:
+            max_results = self.config.top_k
+
+        # Basic tokenization and filtering
+        query_terms = [
+            w.lower() for w in query.split() if len(w) >= 4 and w.isalpha()
+        ]
+        if not query_terms:
+            return []
+
+        scored: List[tuple[float, str]] = []
+        for t in self.texts:
+            tl = t.lower()
+            score = sum(tl.count(term) for term in query_terms)
+            if score > 0:
+                scored.append((float(score), t))
+
+        if not scored:
+            return []
+
+        scored.sort(key=lambda x: x[0], reverse=True)
+        return [t for _, t in scored[:max_results]]
 
     def build_context(self, chunks: List[str]) -> str:
         return "\n\n---\n\n".join(chunks)
