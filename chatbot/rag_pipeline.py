@@ -1,0 +1,86 @@
+from dataclasses import dataclass
+from pathlib import Path
+from typing import List, Tuple
+
+import faiss
+import numpy as np
+from sentence_transformers import SentenceTransformer
+
+from embeddings.vector_store import DEFAULT_MODEL_NAME, load_index_and_texts
+
+
+PROMPT_TEMPLATE = """You are a campus assistant.
+Answer ONLY using the provided context.
+If the answer is not found in the context, reply:
+"The information is not available on the official website."
+
+Context:
+{context}
+
+Question:
+{question}
+
+Answer:"""
+
+
+@dataclass
+class RAGConfig:
+    index_path: Path = Path("embeddings/faiss_index.bin")
+    texts_path: Path = Path("embeddings/text_chunks.npy")
+    model_name: str = DEFAULT_MODEL_NAME
+    top_k: int = 5
+
+
+class RAGPipeline:
+    def __init__(self, config: RAGConfig | None = None) -> None:
+        self.config = config or RAGConfig()
+
+        if not self.config.index_path.exists() or not self.config.texts_path.exists():
+            raise FileNotFoundError(
+                "Vector index or text chunks not found. "
+                "Run the vector store creation step first."
+            )
+
+        self.index, self.texts = load_index_and_texts(
+            self.config.index_path, self.config.texts_path
+        )
+        self.encoder = SentenceTransformer(self.config.model_name)
+
+    def retrieve(self, query: str) -> Tuple[List[str], List[float]]:
+        """Return top-k context chunks and their similarity scores."""
+        query_vec = self.encoder.encode([query], convert_to_numpy=True).astype(
+            "float32"
+        )
+        faiss.normalize_L2(query_vec)
+        scores, indices = self.index.search(query_vec, self.config.top_k)
+
+        idxs = indices[0]
+        scs = scores[0]
+
+        chunks: List[str] = []
+        chunk_scores: List[float] = []
+        for idx, sc in zip(idxs, scs):
+            if idx == -1:
+                continue
+            chunks.append(self.texts[idx])
+            chunk_scores.append(float(sc))
+
+        return chunks, chunk_scores
+
+    def build_context(self, chunks: List[str]) -> str:
+        return "\n\n---\n\n".join(chunks)
+
+    def generate_answer(self, question: str, model_answer_fn) -> str:
+        """
+        model_answer_fn: a callable that accepts a prompt:str and returns str.
+        This allows plugging in OpenAI, Groq, or local models from the app layer.
+        """
+        chunks, _ = self.retrieve(question)
+        if not chunks:
+            return 'The information is not available on the official website.'
+
+        context = self.build_context(chunks)
+        prompt = PROMPT_TEMPLATE.format(context=context, question=question)
+        return model_answer_fn(prompt)
+
+
