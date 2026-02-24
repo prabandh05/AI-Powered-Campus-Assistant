@@ -17,7 +17,16 @@ def load_corpus_text(text_path: Path) -> List[str]:
     raw = text_path.read_text(encoding="utf-8")
     # split on double newlines and strip
     blocks = [b.strip() for b in raw.split("\n\n") if b.strip()]
-    return blocks
+
+    cleaned_blocks: List[str] = []
+    for b in blocks:
+        # Skip chunks that are mostly separators or non-alphabetic noise
+        alpha_ratio = sum(ch.isalpha() for ch in b) / max(len(b), 1)
+        if alpha_ratio < 0.1:
+            continue
+        cleaned_blocks.append(b)
+
+    return cleaned_blocks
 
 
 def build_embeddings(

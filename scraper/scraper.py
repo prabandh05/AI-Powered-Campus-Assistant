@@ -91,7 +91,12 @@ def crawl_website(
 
 
 def save_crawled_text(pages_text: List[str], output_path: str) -> None:
-    """Save all crawled page texts into a single text file."""
+    """Save all crawled page texts into a single text file.
+
+    We separate pages by blank lines only (no separator tokens) so that
+    the downstream chunking logic does not learn separators like '====='
+    as meaningful content.
+    """
     from pathlib import Path
 
     output_file = Path(output_path)
@@ -101,7 +106,9 @@ def save_crawled_text(pages_text: List[str], output_path: str) -> None:
         for i, page in enumerate(pages_text):
             f.write(page)
             if i != len(pages_text) - 1:
-                f.write("\n\n" + "=" * 80 + "\n\n")
+                # Just add blank lines between pages; no visual separators that would
+                # pollute the semantic embeddings.
+                f.write("\n\n\n")
 
 
 def main() -> None:
