@@ -7,6 +7,7 @@ import numpy as np
 from sentence_transformers import SentenceTransformer
 
 from embeddings.vector_store import DEFAULT_MODEL_NAME, load_index_and_texts
+from chatbot.facts_store import get_fact_answer
 
 
 PROMPT_TEMPLATE = """You are a campus assistant.
@@ -116,6 +117,12 @@ class RAGPipeline:
         model_answer_fn: a callable that accepts a prompt:str and returns str.
         This allows plugging in OpenAI, Groq, or local models from the app layer.
         """
+        # 1) Try to answer using structured facts for high-value intents
+        fact = get_fact_answer(question)
+        if fact is not None:
+            return fact
+
+        # 2) Fall back to retrieval-augmented generation over website content
         chunks, _ = self.retrieve(question)
         if not chunks:
             return 'The information is not available on the official website.'
@@ -131,6 +138,12 @@ class RAGPipeline:
         Variant that also returns the raw context string used to build the prompt.
         Useful for debugging and for a 'show context' UI option.
         """
+        # 1) Try structured facts first
+        fact = get_fact_answer(question)
+        if fact is not None:
+            return fact, ""
+
+        # 2) Otherwise use retrieval-augmented answers
         chunks, _ = self.retrieve(question)
         if not chunks:
             return 'The information is not available on the official website.', ''

@@ -89,7 +89,7 @@ def _groq_llm(prompt: str) -> str:
 
 def main() -> None:
     st.set_page_config(page_title="AI-Powered Campus Assistant", layout="wide")
-    st.title("🧠 AI-Powered Campus Assistant (MVP)")
+    st.title("AI-Powered Campus Assistant (MVP)")
     st.write(
         "Ask questions about your campus based on content scraped from the official website."
     )
@@ -160,8 +160,8 @@ def main() -> None:
                 )
                 context = None
 
-        st.session_state.chat_history.append(("You", user_query, None))
-        st.session_state.chat_history.append(("Assistant", answer, context))
+        st.session_state.chat_history.append(("You 👤", user_query, None))
+        st.session_state.chat_history.append(("Assistant 🤖", answer, context))
 
     st.subheader("Conversation")
     for role, text, ctx in st.session_state.chat_history:
