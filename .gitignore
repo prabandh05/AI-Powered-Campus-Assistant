@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+env/
+venv/
+ENV/
+
+# Environment variables
+.env
+
+# Project specific
+embeddings/faiss_index.bin
+embeddings/text_chunks.npy
+data/website_text.txt
+server.log
+
+# IDEs
+.vscode/
+.idea/

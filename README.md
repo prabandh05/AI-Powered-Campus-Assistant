@@ -13,9 +13,9 @@ Key goals:
 - `embeddings/vector_store.py`: Builds sentence-transformer embeddings and a FAISS vector index from the scraped text.
 - `chatbot/rag_pipeline.py`: Retrieval pipeline (semantic search + keyword fallback) and strict grounding prompt.
 - `chatbot/facts_store.py`: Small **structured facts layer** (location / facilities / fees / examinations) for very precise, low-hallucination answers.
-- `app.py`: Streamlit-based chatbot UI that uses the RAG pipeline.
-- `requirements.txt`: Python dependencies for the MVP.
-- `about_project.txt`: Full end-to-end explanation of how the system works.
+- `server.py`: FastAPI-based backend that serves the RAG pipeline.
+- `frontend/`: ChatGPT-like web interface (HTML/CSS/JS).
+- `requirements.txt`: Python dependencies for the project.
 
 ### Features
 
@@ -26,28 +26,38 @@ Key goals:
   - strict prompt rule: “answer ONLY using provided context”
   - safe fallback response when context doesn’t contain the answer
   - structured facts for critical intents
-- **Streamlit UI**:
-  - simple chat interface
-  - optional “Show retrieved context” debugging view
+- **Modern Web UI**:
+  - ChatGPT-like interface with smooth animations and dark mode.
+  - Responsive design for mobile and desktop.
+  - Real-time interaction with the FastAPI backend.
 
 ### Requirements
 
 - Python 3.10+ recommended
 - Windows (PowerShell) commands below; works on macOS/Linux with equivalent shell commands
 
-### Installation (from scratch)
+### Installation
 
-1. **Clone / open the project folder**
-
-2. **Create and activate a virtual environment (recommended)**
-
+1. **Clone the repository**
    ```bash
-   python -m venv .venv
-   .venv\Scripts\activate  # Windows
+   git clone <your-repo-url>
+   cd "Ai Powerd Campus Assistant"
    ```
 
-3. **Install dependencies**
+2. **Create and activate a virtual environment**
 
+   - **Windows (PowerShell)**:
+     ```powershell
+     python -m venv .venv
+     .venv\Scripts\activate
+     ```
+   - **macOS / Linux**:
+     ```bash
+     python3 -m venv .venv
+     source .venv/bin/activate
+     ```
+
+3. **Install dependencies**
    ```bash
    pip install -r requirements.txt
    ```
@@ -80,7 +90,7 @@ This app supports Groq for the LLM step.
 - **PowerShell (temporary for current terminal session)**:
 
   ```powershell
-  $env:GROQ_API_KEY = "YOUR_GROQ_KEY_HERE"
+  $env:GROQ_API_KEY = "<YOUR_GROQ_API_KEY>"
   ```
 
 - **Windows (permanent user environment variable)**:
@@ -92,13 +102,16 @@ This app supports Groq for the LLM step.
 
 If `GROQ_API_KEY` is not set, the app will run in a **dummy mode** that shows retrieved context but does not generate fluent answers.
 
-4. **Run the Streamlit app**
+4. **Run the Backend Server**
 
    ```bash
-   streamlit run app.py
+   python server.py
    ```
+   The backend will start at `http://127.0.0.1:8000`.
 
-   Open the displayed local URL in your browser to chat with the assistant.
+5. **Launch the Frontend**
+
+   Simply open `frontend/index.html` in your favorite web browser.
 
 ### How answers are produced (very short)
 
@@ -178,6 +191,6 @@ See `about_project.txt` for a detailed end-to-end explanation of:
 
 ### LLM / Model Configuration
 
-- Default Groq model used in `app.py`: `llama-3.1-8b-instant`
-- To change the model, update the `model=` parameter inside `_groq_llm()` in `app.py`.
+- Default Groq model used in `server.py`: `llama-3.1-8b-instant`
+- To change the model, update the `model=` parameter inside `_groq_llm()` in `server.py`.
 

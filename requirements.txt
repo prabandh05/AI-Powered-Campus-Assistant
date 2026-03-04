@@ -5,4 +5,7 @@ faiss-cpu
 streamlit
 numpy
 groq
-
+fastapi
+uvicorn
+python-multipart
+python-dotenv
