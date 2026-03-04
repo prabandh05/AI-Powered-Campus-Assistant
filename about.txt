@@ -1,0 +1,58 @@
+# AI-Powered Campus Assistant: Full Technical Architecture (End-to-End)
+
+This document provides a comprehensive technical breakdown of the project, from data ingestion to the user interface. It is designed to be used for technical presentations and architectural reviews.
+
+---
+
+## 1. Project Overview
+The Campus AI is a **Retrieval-Augmented Generation (RAG)** system designed to answer specific campus-related queries using only verified information from official college platforms. Unlike generic AI, it is grounded in real data, drastically reducing "hallucination."
+
+## 2. Phase 1: Deep Web Scraping (`scraper/scraper.py`)
+The system starts by building its own knowledge base:
+- **Crawler Logic**: Uses standard Python libraries (`requests`, `BeautifulSoup`) to recursively crawl the college website.
+- **Link Discovery**: It identifies internal links while avoiding external sites, media files, and redundant URLs.
+- **Content Extraction**: It extracts text from specific HTML tags (`h1-h6`, `p`, `li`, `div`) to ensure meaningful content is captured while discarding boilerplate headers, footers, and scripts.
+- **Output**: Generates `data/website_text.txt`, a giant corpus of cleaned raw text representing the "brain" of the assistant.
+
+## 3. Phase 2: Knowledge Representation (`embeddings/vector_store.py`)
+Computers don't understand text directly; they understand numbers. This phase converts text into math:
+- **Chunking**: The raw text is broken into smaller pieces (chunks) so that retrieval is precise.
+- **Embedding**: Each chunk is passed through a **Sentence-Transformer model** (`all-MiniLM-L6-v2`). This creates a 384-dimensional vector (a list of numbers) that captures the "semantic meaning" of the text.
+- **Vector Database (FAISS)**: Uses **Facebook AI Similarity Search (FAISS)** to index these vectors. This allows the system to find relevant information in milliseconds using high-speed math (Euclidean distance/Cosine similarity).
+- **Persistence**: Saves the index to `embeddings/faiss_index.bin` for instant loading during runtime.
+
+## 4. Phase 3: The Hybrid Retrieval Engine (`chatbot/rag_pipeline.py`)
+This is the core "logic" of the chatbot. When a user asks a question, the pipeline follows three stages:
+1.  **Intent Detection (Structured Facts)**: It first checks `chatbot/facts_store.py` for keyword matches. If you ask "Where is the college?", it bypasses the LLM and gives a pre-written, 100% accurate address from the `FACTS` dictionary.
+2.  **Semantic Search**: If no fact matches, it converts the user's question into a vector and searches the FAISS index for the 5 most similar chunks of text from the website.
+3.  **Keyword Fallback**: If semantic search scores are low (e.g., searching for a very specific term like "bus fees"), the system performs a traditional keyword-based search over the raw text to ensure nothing is missed.
+
+## 5. Phase 4: Unified Backend Architecture (`server.py`)
+The backend is built with **FastAPI**, a modern, high-performance Python framework:
+- **API Endpoints**:
+    - `POST /api/chat`: Receives the user's message, runs it through the RAG pipeline, and returns the AI's answer.
+    - `GET /health`: Monitors the status of the RAG index and Groq API.
+- **LLM Integration (Groq)**: The retrieved context and user question are wrapped in a **Strict System Prompt** (e.g., "Answer ONLY using the given context"). This is sent to the **Llama-3.1-8b** model via the Groq API for lightning-fast answer generation.
+- **Static Hosting**: The server directly hosts the `frontend/` folder, allowing the entire app to run with a single command (`python server.py`).
+
+## 6. Phase 5: Modern UI/UX (`frontend/`)
+A premium, "ChatGPT-like" interface built with:
+- **Tailwind CSS**: For a sleek, dark-themed, and responsive design.
+- **Lucide Icons**: For modern, clean visual cues.
+- **Flexbox Layout**: Ensures the chat area scrolls while the input box remains fixed at the bottom, providing a smooth user experience.
+- **Dynamic Interactions**: Includes auto-scrolling, loading animations, and markdown-rendered AI responses.
+
+## 7. The Workflow Summary (End-to-End)
+1.  **User Message** -> Sent to FastAPI Backend.
+2.  **Fact Check** -> If match found, return verified answer.
+3.  **Vector Search** -> Find relevant website snippets in FAISS.
+4.  **Keyword Search** -> (Optional) Ensure specific terms are found.
+5.  **Prompt Engineering** -> Combine "Answer only using this: [Snippets]" + "[User Question]".
+6.  **LLM Call** -> Groq generates a natural language response.
+7.  **Answer Display** -> Frontend renders the result with a smooth fade-in animation.
+
+## 8. Why This Architecture?
+- **Grounding**: The AI is forbidden from guessing; it only knows what it retrieves.
+- **Low Latency**: FAISS + Groq ensures responses in under 1-2 seconds.
+- **Low Cost**: Uses open-weight models (via Groq) and local vector indexing.
+- **Scalability**: Can handle thousands of pages by simply re-running the scraper.
