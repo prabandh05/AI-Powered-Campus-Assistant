@@ -102,16 +102,16 @@ This app supports Groq for the LLM step.
 
 If `GROQ_API_KEY` is not set, the app will run in a **dummy mode** that shows retrieved context but does not generate fluent answers.
 
-4. **Run the Backend Server**
+4. **Run the Application**
 
    ```bash
    python server.py
    ```
-   The backend will start at `http://127.0.0.1:8000`.
+   The backend and frontend will both be served at `http://localhost:8000`.
 
-5. **Launch the Frontend**
+5. **Interact with the Assistant**
 
-   Simply open `frontend/index.html` in your favorite web browser.
+   Simply visit `http://localhost:8000` in your web browser.
 
 ### How answers are produced (very short)
 
