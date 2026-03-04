@@ -4,6 +4,8 @@ from typing import List, Optional
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from groq import Groq
 
@@ -132,6 +134,15 @@ async def chat(request: ChatRequest):
         return ChatResponse(answer=answer, context=context)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+# --- Serve Frontend ---
+
+# Mount static files (CSS, JS)
+app.mount("/static", StaticFiles(directory="frontend"), name="static")
+
+@app.get("/")
+async def serve_index():
+    return FileResponse("frontend/index.html")
 
 if __name__ == "__main__":
     import uvicorn
