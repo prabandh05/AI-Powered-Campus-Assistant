@@ -410,6 +410,3 @@ This project was developed as part of AIML coursework at DSCE, Bangalore.
 
 ---
 
-<p align="center">
-  Built with ❤️ at Dayananda Sagar College of Engineering
-</p>
