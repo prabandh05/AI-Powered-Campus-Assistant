@@ -1,58 +1,400 @@
-# AI-Powered Campus Assistant: Full Technical Architecture (End-to-End)
+================================================================================
+                    CAMPUS AI OPERATING SYSTEM — ABOUT
+             Dayananda Sagar College of Engineering (DSCE), Bangalore
+================================================================================
 
-This document provides a comprehensive technical breakdown of the project, from data ingestion to the user interface. It is designed to be used for technical presentations and architectural reviews.
+1. PROJECT OVERVIEW
+================================================================================
 
----
+Campus AI OS is a Role-Based AI-Powered Campus Assistant built for Dayananda
+Sagar College of Engineering (DSCE). It combines a traditional SQL database for
+structured data (student profiles, faculty schedules) with a RAG (Retrieval-
+Augmented Generation) engine for unstructured campus knowledge, delivering an
+intelligent assistant that can answer any question about the college.
 
-## 1. Project Overview
-The Campus AI is a **Retrieval-Augmented Generation (RAG)** system designed to answer specific campus-related queries using only verified information from official college platforms. Unlike generic AI, it is grounded in real data, drastically reducing "hallucination."
+The system is designed with three user roles — Student, Faculty, and Admin —
+each with tailored dashboards and permissions. The frontend is built with React
+(Vite) and styled to look like a modern AI chat application (inspired by ChatGPT
+and Claude AI interfaces).
 
-## 2. Phase 1: Deep Web Scraping (`scraper/scraper.py`)
-The system starts by building its own knowledge base:
-- **Crawler Logic**: Uses standard Python libraries (`requests`, `BeautifulSoup`) to recursively crawl the college website.
-- **Link Discovery**: It identifies internal links while avoiding external sites, media files, and redundant URLs.
-- **Content Extraction**: It extracts text from specific HTML tags (`h1-h6`, `p`, `li`, `div`) to ensure meaningful content is captured while discarding boilerplate headers, footers, and scripts.
-- **Output**: Generates `data/website_text.txt`, a giant corpus of cleaned raw text representing the "brain" of the assistant.
 
-## 3. Phase 2: Knowledge Representation (`embeddings/vector_store.py`)
-Computers don't understand text directly; they understand numbers. This phase converts text into math:
-- **Chunking**: The raw text is broken into smaller pieces (chunks) so that retrieval is precise.
-- **Embedding**: Each chunk is passed through a **Sentence-Transformer model** (`all-MiniLM-L6-v2`). This creates a 384-dimensional vector (a list of numbers) that captures the "semantic meaning" of the text.
-- **Vector Database (FAISS)**: Uses **Facebook AI Similarity Search (FAISS)** to index these vectors. This allows the system to find relevant information in milliseconds using high-speed math (Euclidean distance/Cosine similarity).
-- **Persistence**: Saves the index to `embeddings/faiss_index.bin` for instant loading during runtime.
+2. PROBLEM STATEMENT
+================================================================================
 
-## 4. Phase 3: The Hybrid Retrieval Engine (`chatbot/rag_pipeline.py`)
-This is the core "logic" of the chatbot. When a user asks a question, the pipeline follows three stages:
-1.  **Intent Detection (Structured Facts)**: It first checks `chatbot/facts_store.py` for keyword matches. If you ask "Where is the college?", it bypasses the LLM and gives a pre-written, 100% accurate address from the `FACTS` dictionary.
-2.  **Semantic Search**: If no fact matches, it converts the user's question into a vector and searches the FAISS index for the 5 most similar chunks of text from the website.
-3.  **Keyword Fallback**: If semantic search scores are low (e.g., searching for a very specific term like "bus fees"), the system performs a traditional keyword-based search over the raw text to ensure nothing is missed.
+Students and faculty at DSCE need quick, reliable answers about:
+  - Admission procedures, fee structures, eligibility criteria
+  - Department information, course details, syllabus
+  - Placement statistics, recruiter lists
+  - Faculty availability and consultation hours
+  - Events, notices, rules and regulations
+  - Campus facilities (hostel, library, sports, etc.)
 
-## 5. Phase 4: Unified Backend Architecture (`server.py`)
-The backend is built with **FastAPI**, a modern, high-performance Python framework:
-- **API Endpoints**:
-    - `POST /api/chat`: Receives the user's message, runs it through the RAG pipeline, and returns the AI's answer.
-    - `GET /health`: Monitors the status of the RAG index and Groq API.
-- **LLM Integration (Groq)**: The retrieved context and user question are wrapped in a **Strict System Prompt** (e.g., "Answer ONLY using the given context"). This is sent to the **Llama-3.1-8b** model via the Groq API for lightning-fast answer generation.
-- **Static Hosting**: The server directly hosts the `frontend/` folder, allowing the entire app to run with a single command (`python server.py`).
+Traditional methods (browsing the website, asking seniors, visiting offices)
+are slow and often produce incomplete answers. This system centralizes all
+campus knowledge into a single AI-powered interface.
 
-## 6. Phase 5: Modern UI/UX (`frontend/`)
-A premium, "ChatGPT-like" interface built with:
-- **Tailwind CSS**: For a sleek, dark-themed, and responsive design.
-- **Lucide Icons**: For modern, clean visual cues.
-- **Flexbox Layout**: Ensures the chat area scrolls while the input box remains fixed at the bottom, providing a smooth user experience.
-- **Dynamic Interactions**: Includes auto-scrolling, loading animations, and markdown-rendered AI responses.
 
-## 7. The Workflow Summary (End-to-End)
-1.  **User Message** -> Sent to FastAPI Backend.
-2.  **Fact Check** -> If match found, return verified answer.
-3.  **Vector Search** -> Find relevant website snippets in FAISS.
-4.  **Keyword Search** -> (Optional) Ensure specific terms are found.
-5.  **Prompt Engineering** -> Combine "Answer only using this: [Snippets]" + "[User Question]".
-6.  **LLM Call** -> Groq generates a natural language response.
-7.  **Answer Display** -> Frontend renders the result with a smooth fade-in animation.
+3. SYSTEM ARCHITECTURE
+================================================================================
 
-## 8. Why This Architecture?
-- **Grounding**: The AI is forbidden from guessing; it only knows what it retrieves.
-- **Low Latency**: FAISS + Groq ensures responses in under 1-2 seconds.
-- **Low Cost**: Uses open-weight models (via Groq) and local vector indexing.
-- **Scalability**: Can handle thousands of pages by simply re-running the scraper.
+The system uses a HYBRID INTELLIGENCE architecture:
+
+  ┌─────────────────────────────────────────────────────────┐
+  │                   USER (Browser)                        │
+  │              React Frontend (Vite, port 5173)           │
+  └──────────────────────┬──────────────────────────────────┘
+                         │ HTTP API calls
+  ┌──────────────────────▼──────────────────────────────────┐
+  │                FastAPI Backend (port 8000)               │
+  │                                                         │
+  │  ┌──────────────┐  ┌──────────────┐  ┌───────────────┐ │
+  │  │  Auth Module  │  │ Query Router │  │  CORS Midware │ │
+  │  │  (JWT Auth)   │  │ (Classifier) │  │               │ │
+  │  └──────┬───────┘  └──────┬───────┘  └───────────────┘ │
+  │         │                 │                             │
+  │         │    ┌────────────┴────────────┐                │
+  │         │    │                         │                │
+  │  ┌──────▼────▼──┐            ┌─────────▼────────────┐  │
+  │  │   SQL Layer   │            │    RAG Engine         │  │
+  │  │  (SQLAlchemy) │            │ (FAISS + Embeddings)  │  │
+  │  │               │            │                       │  │
+  │  │  campus.db    │            │  vector_db/           │  │
+  │  │  - Users      │            │  - faiss.index        │  │
+  │  │  - Profiles   │            │  - chunks.npy         │  │
+  │  │  - Schedules  │            │                       │  │
+  │  │  - Documents  │            │  campus_clean.txt     │  │
+  │  └──────────────┘            └──────────┬────────────┘  │
+  │                                         │               │
+  │                              ┌──────────▼────────────┐  │
+  │                              │   Groq LLM API        │  │
+  │                              │   (Llama-3.1-8b)      │  │
+  │                              │   Final answer gen     │  │
+  │                              └───────────────────────┘  │
+  └─────────────────────────────────────────────────────────┘
+
+
+4. TWO TYPES OF QUERIES (WHY HYBRID)
+================================================================================
+
+  TYPE 1: STRUCTURED / EXACT DATA (→ SQL Database)
+  ─────────────────────────────────────────────────
+  Examples:
+    - "What are my marks?"           → Fetches from StudentProfile table
+    - "Is Shreya available?"         → Fetches from StaffProfile table
+    - "Show me faculty schedule"     → Fetches from StaffSchedule table
+
+  These need PRECISION, not AI guessing. An LLM cannot accurately track
+  schedules or grades. SQL handles this perfectly.
+
+  TYPE 2: UNSTRUCTURED / KNOWLEDGE (→ RAG Pipeline)
+  ─────────────────────────────────────────────────
+  Examples:
+    - "What are attendance rules?"   → Searches campus knowledge base
+    - "Tell me about placements"     → Retrieves placement statistics
+    - "What is the admission process?" → Returns eligibility criteria
+
+  These need SEMANTIC UNDERSTANDING. The user's question may not exactly
+  match the stored text, so we use vector embeddings to find the most
+  similar content regardless of exact wording.
+
+  WHY NOT JUST USE AN LLM?
+  - LLMs hallucinate (make up facts)
+  - LLMs can't track real-time faculty availability
+  - LLMs can't query a database for exact marks
+  - LLMs don't know college-specific data unless you feed it
+
+  SOLUTION: We SPLIT the responsibilities. The Query Router classifies
+  every user question and sends it to the right engine.
+
+
+5. RAG (RETRIEVAL-AUGMENTED GENERATION) PIPELINE
+================================================================================
+
+  Step 1: DATA COLLECTION
+  ───────────────────────
+  - A web scraper (BeautifulSoup) crawls the DSCE website (dsce.edu.in)
+  - Extracts text from 50+ pages (departments, admissions, placements, etc.)
+  - Raw data saved to: data/campus_knowledge.txt (1.3 MB, 50,189 lines)
+
+  Step 2: DATA CLEANING
+  ─────────────────────
+  - Script: scraper/clean_data.py
+  - Removes navigation menus, footers, boilerplate (90% of raw data is noise!)
+  - Deduplicates repeated lines
+  - Output: data/campus_clean.txt (347 KB, 4,907 clean lines)
+
+  Step 3: CHUNKING
+  ────────────────
+  - Paragraph-aware chunking (not naive word splitting)
+  - Groups related paragraphs together (300-400 words per chunk)
+  - Preserves semantic coherence within each chunk
+  - Avoids splitting mid-sentence
+
+  Step 4: EMBEDDING
+  ─────────────────
+  - Model: sentence-transformers/all-MiniLM-L6-v2
+  - Converts each text chunk into a 384-dimensional vector
+  - Vectors normalized for cosine similarity
+
+  Step 5: INDEXING
+  ────────────────
+  - FAISS (Facebook AI Similarity Search) index
+  - Inner Product search on normalized vectors = cosine similarity
+  - Current index: 224 vectors (chunks)
+  - Stored at: data/vector_db/faiss.index + data/vector_db/chunks.npy
+
+  Step 6: RETRIEVAL + GENERATION
+  ──────────────────────────────
+  - User asks a question
+  - Question is embedded using the same model
+  - FAISS finds the top-5 most similar chunks
+  - Chunks are passed as context to the LLM (Groq Llama-3.1-8b)
+  - LLM generates a grounded answer using ONLY the provided context
+  - Anti-hallucination rules in the system prompt prevent fabrication
+
+
+6. QUERY ROUTING SYSTEM
+================================================================================
+
+  The QueryRouter classifies every user query using fast keyword matching:
+
+  ┌─────────────────────┐
+  │   User Query         │
+  └──────────┬──────────┘
+             │
+  ┌──────────▼──────────┐
+  │  Does it mention     │──YES──→ SQL (database lookup)
+  │  "my marks", "cgpa"? │
+  └──────────┬──────────┘
+             │ NO
+  ┌──────────▼──────────┐
+  │  Does it mention     │──YES──→ HYBRID (SQL + RAG)
+  │  "meet", "faculty",  │
+  │  "available"?        │
+  └──────────┬──────────┘
+             │ NO
+  ┌──────────▼──────────┐
+  │  General knowledge   │──YES──→ RAG (vector search)
+  │  question?           │
+  └──────────┬──────────┘
+             │ NO
+             └──────────────────→ RAG (default fallback)
+
+  SQL keywords: my marks, my profile, my cgpa, is available, can i meet, etc.
+  HYBRID triggers: faculty, meet, staff, available, mam, sir, professor
+  RAG keywords: placement, admission, hostel, department, exam, events, etc.
+
+
+7. ROLE-BASED ACCESS CONTROL
+================================================================================
+
+  STUDENT ROLE:
+    - Can chat with the AI assistant (RAG + SQL queries)
+    - Can view their own profile (marks, CGPA, department)
+    - Cannot access admin or faculty panels
+
+  FACULTY ROLE:
+    - Can chat with the AI assistant
+    - Can edit their profile (name, department, designation)
+    - Can toggle availability status (available / not available)
+    - Can set consultation hours (when students can meet them)
+
+  ADMIN ROLE:
+    - Can chat with the AI assistant
+    - Snap Knowledge: Inject quick facts directly into the vector database
+    - Formal Knowledge: Add structured data with title, category, and content
+    - File Upload: Upload PDF/TXT files to expand the knowledge base
+    - System Dashboard: View all registered users and indexed documents
+
+  Authentication: JWT tokens (30-minute expiry), password hashing via pbkdf2_sha256
+
+
+8. TECHNOLOGY STACK
+================================================================================
+
+  BACKEND:
+    - Python 3.12
+    - FastAPI (REST API framework)
+    - Uvicorn (ASGI server)
+    - SQLAlchemy (ORM for SQLite database)
+    - SQLite (lightweight database, no setup needed)
+
+  AI / ML:
+    - sentence-transformers (all-MiniLM-L6-v2 for text embeddings)
+    - FAISS (Facebook AI Similarity Search for vector indexing)
+    - Groq API (Llama-3.1-8b-instant for answer generation)
+    - PyTorch (deep learning backend for sentence-transformers)
+
+  FRONTEND:
+    - React 19 (component-based UI library)
+    - Vite 8 (fast build tool and dev server)
+    - Vanilla CSS (custom dark theme, no UI framework)
+    - Design: ChatGPT/Claude AI inspired interface
+
+  DATA PIPELINE:
+    - BeautifulSoup4 (web scraping and HTML parsing)
+    - Custom data cleaning pipeline (90% noise removal)
+    - Paragraph-aware text chunking
+
+  AUTHENTICATION:
+    - JWT (JSON Web Tokens) via python-jose
+    - Password hashing via passlib (pbkdf2_sha256)
+    - Role-based endpoint protection
+
+  CONFIGURATION:
+    - python-dotenv (.env file for API keys)
+
+
+9. PROJECT FILE STRUCTURE
+================================================================================
+
+  Campus/
+  ├── .env                          # API keys (GROQ_API_KEY)
+  ├── requirements.txt              # Python dependencies
+  ├── about.txt                     # This file
+  ├── README.md                     # Setup and usage instructions
+  │
+  ├── backend/                      # FastAPI server
+  │   ├── __init__.py
+  │   ├── config.py                 # Loads .env variables
+  │   ├── database.py               # SQLAlchemy engine and session
+  │   ├── models.py                 # User, StudentProfile, StaffProfile, etc.
+  │   ├── auth.py                   # JWT auth, password hashing, role guards
+  │   ├── main.py                   # All API endpoints (auth, staff, admin)
+  │   ├── core/
+  │   │   ├── rag_engine.py         # FAISS indexing, search, chunking
+  │   │   └── query_router.py       # Intent classification (SQL/RAG/HYBRID)
+  │   └── routes/
+  │       └── chat.py               # Chat endpoint (query → router → LLM)
+  │
+  ├── frontend-react/               # React frontend (Vite)
+  │   ├── package.json
+  │   ├── index.html
+  │   ├── src/
+  │   │   ├── main.jsx              # Entry point
+  │   │   ├── App.jsx               # All components (Auth, Chat, Faculty, Admin)
+  │   │   ├── api.js                # API client functions
+  │   │   └── index.css             # Premium dark theme CSS
+  │   └── dist/                     # Production build output
+  │
+  ├── scraper/                      # Data pipeline scripts
+  │   ├── scraper.py                # Website crawler (BeautifulSoup)
+  │   ├── clean_data.py             # Data cleaning (removes 90% noise)
+  │   └── rebuild_index.py          # Rebuilds FAISS index from clean data
+  │
+  └── data/                         # All persistent data
+      ├── campus.db                 # SQLite database (users, profiles, docs)
+      ├── campus_knowledge.txt      # Raw scraped data (1.3 MB)
+      ├── campus_clean.txt          # Cleaned data (347 KB)
+      ├── vector_db/
+      │   ├── faiss.index           # FAISS vector index (337 KB)
+      │   └── chunks.npy            # Text chunks array (451 KB)
+      └── documents/                # Admin-uploaded files
+
+
+10. WORKFLOW: HOW A USER QUERY IS PROCESSED
+================================================================================
+
+  Example: Student asks "When can I meet Shreya mam?"
+
+  1. Frontend sends POST /chat/query?query=When+can+I+meet+Shreya+mam
+     with JWT token in Authorization header.
+
+  2. Backend verifies JWT → identifies user as "student" role.
+
+  3. QueryRouter.classify() detects "meet" and "mam" → returns "HYBRID".
+
+  4. HYBRID path triggers:
+     a. SQL: search_faculty_by_name("shreya", db) → finds StaffProfile
+        where name contains "shreya" → returns availability, schedule.
+     b. RAG: rag_engine.search("When can I meet Shreya mam") → returns
+        top-5 relevant chunks from the vector database.
+
+  5. System prompt is constructed with:
+     - User role: student
+     - SQL data: {name: "Shreya", dept: "ISE", available: true,
+                  schedule: [{day: "Monday", start: "10:00 AM", end: "11:30 AM"}]}
+     - RAG context: relevant campus knowledge chunks
+
+  6. Groq API (Llama-3.1-8b-instant) generates a response:
+     "Shreya is currently available. You can meet her on Monday
+      from 10:00 AM to 11:30 AM. She is in the ISE department."
+
+  7. Response sent back to frontend with intent="HYBRID" and source tag.
+
+
+11. ADMIN KNOWLEDGE MANAGEMENT WORKFLOW
+================================================================================
+
+  A. SNAP KNOWLEDGE (Quick entry, no category)
+  ─────────────────────────────────────────────
+  Admin types: "DSCE won Best Engineering College Award 2025"
+  → Saved to data/documents/ as text file
+  → Chunked and embedded by RAG engine
+  → Immediately searchable in the vector database
+  → Students can now ask about the award
+
+  B. FORMAL KNOWLEDGE (Structured entry with category)
+  ────────────────────────────────────────────────────
+  Admin fills:
+    Title: "Attendance Rules 2025"
+    Category: "Rules"
+    Content: "Students must maintain 85% attendance..."
+  → Same pipeline as above, but tagged with category
+
+  C. FILE UPLOAD (Bulk document indexing)
+  ────────────────────────────────────────
+  Admin uploads a PDF or TXT file
+  → File saved to data/documents/
+  → Text extracted and indexed into vector database
+  → All content becomes immediately queryable
+
+
+12. KEY DESIGN DECISIONS
+================================================================================
+
+  1. WHY FAISS OVER CHROMA/PINECONE?
+     - No external service needed (runs locally)
+     - Faster for small-to-medium datasets (<100K vectors)
+     - No API costs or rate limits
+
+  2. WHY GROQ OVER OPENAI?
+     - Free tier with generous limits
+     - Extremely fast inference (LPU hardware)
+     - Llama-3.1-8b-instant is sufficient for Q&A
+
+  3. WHY KEYWORD ROUTER OVER LLM ROUTER?
+     - Zero latency (instant classification)
+     - No extra API call per query
+     - More predictable behavior
+
+  4. WHY REACT OVER STREAMLIT?
+     - Professional, production-quality UI
+     - Full control over design and UX
+     - Persistent login via localStorage
+     - Faster, more responsive interface
+
+  5. WHY COSINE SIMILARITY OVER L2 DISTANCE?
+     - Better for text embeddings (direction matters more than magnitude)
+     - Normalized vectors give consistent similarity scores
+     - Industry standard for semantic search
+
+
+13. FUTURE ENHANCEMENTS
+================================================================================
+
+  - Conversation memory (multi-turn context)
+  - Calendar view for faculty schedules
+  - Real-time notifications for events
+  - Docker containerization for deployment
+  - Admin analytics dashboard
+  - Mobile-responsive PWA
+  - Integration with college ERP system
+  - Multi-language support (Kannada, Hindi)
+
+
+================================================================================
+  Developed as part of AIML coursework
+  College: Dayananda Sagar College of Engineering, Bangalore
+  Technology: Python, FastAPI, React, FAISS, Groq LLM
+================================================================================
